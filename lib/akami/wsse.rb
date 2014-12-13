@@ -42,11 +42,11 @@ module Akami
 
     # Sets authentication credentials for a wsse:UsernameToken header.
     # Also accepts whether to use WSSE digest authentication.
-    def credentials(username, password, digest = false, plan_text_password = false)
+    def credentials(username, password, digest = false, plain_text_password = false)
       self.username = username
       self.password = password
       self.digest = digest
-      self.plan_text_password = plan_text_password
+      self.plain_text_password = plain_text_password
     end
 
     attr_accessor :username, :password, :created_at, :expires_at, :signature, :verify_response
