@@ -42,10 +42,11 @@ module Akami
 
     # Sets authentication credentials for a wsse:UsernameToken header.
     # Also accepts whether to use WSSE digest authentication.
-    def credentials(username, password, digest = false)
+    def credentials(username, password, digest = false, plan_text_password = false)
       self.username = username
       self.password = password
       self.digest = digest
+      self.plan_text_password = plan_text_password
     end
 
     attr_accessor :username, :password, :created_at, :expires_at, :signature, :verify_response
@@ -63,7 +64,11 @@ module Akami
       !!@digest
     end
 
-    attr_writer :digest
+    def plain_text_password?
+      !!@plain_text_password
+    end
+
+    attr_writer :digest, :plain_text_password
 
     # Returns whether to generate a wsse:UsernameToken header.
     def username_token?
@@ -117,7 +122,7 @@ module Akami
           "wsse:Username" => username,
           "wsse:Nonce" => Base64.encode64(nonce).chomp,
           "wsu:Created" => timestamp,
-          "wsse:Password" => digest_password,
+          "wsse:Password" => ((plain_text_password?) ? password : digest_password),
           :attributes! => { "wsse:Password" => { "Type" => PASSWORD_DIGEST_URI },  "wsse:Nonce" => { "EncodingType" => BASE64_URI } }
         # clear the nonce after each use
         @nonce = nil
