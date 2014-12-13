@@ -123,7 +123,7 @@ module Akami
           "wsse:Nonce" => Base64.encode64(nonce).chomp,
           "wsu:Created" => timestamp,
           "wsse:Password" => ((plain_text_password?) ? password : digest_password),
-          :attributes! => { "wsse:Password" => { "Type" => PASSWORD_DIGEST_URI },  "wsse:Nonce" => { "EncodingType" => BASE64_URI } }
+          :attributes! => { "wsse:Password" => { "Type" => ((plain_text_password?) ? PASSWORD_TEXT_URI : PASSWORD_DIGEST_URI) } }
         # clear the nonce after each use
         @nonce = nil
       else
