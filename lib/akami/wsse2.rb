@@ -1,3 +1,9 @@
+require 'time'
+require 'base64'
+require 'gyoku'
+require 'digest/sha1'
+require 'securerandom'
+
 module Akami
 
   class Wsse2
@@ -18,6 +24,7 @@ module Akami
         :use_nonce,
         :use_created,
         :use_signature,
+        :use_global_namespaces,
         :env_namespace
     ]
 
@@ -30,7 +37,9 @@ module Akami
                   :use_nonce,
                   :use_created,
                   :use_signature,
+                  :use_global_namespaces,
                   :env_namespace
+
     #endregion
 
     def initialize(params = {})
@@ -39,7 +48,7 @@ module Akami
       end
 
       # Make sure soap envelope namespace is not blank
-      if env_namespace.blank?
+      if env_namespace.nil? or env_namespace.blank?
         self.env_namespace = 'soap'
       end
     end
@@ -65,6 +74,9 @@ module Akami
       use_signature
     end
 
+    def use_global_namespaces?
+      use_global_namespaces
+    end
 
     def to_xml
       Gyoku.xml build_wsse_header
@@ -73,38 +85,61 @@ module Akami
     private
 
       def build_wsse_header
-        self.attributes = {}
-        # Include mustUnderstand if required
-        self.attributes.merge!({ 'wsse:Security' => { "#{env_namespace}:mustUnderstand" => '1' } }) if use_signature?
-
         # Build the base hash
         self.hash = {
             'wsse:Security' => {
-                'wsse:UsernameToken' => build_username_token
+                :attributes! => {
+                    'wsse:UsernameToken' => {
+                        'wsu:Id' => "SecurityToken-#{SecureRandom.uuid}"
+                    },
+                    'wsu:Timestamp' => {
+                        'wsu:Id' => "Timestamp-#{SecureRandom.uuid}"
+                    }
+                }
             }
         }
-        # Merge in Timestamp if required
-        self.hash['wsse:Security'].merge!({ 'wsse:Timestamp' => build_timestamp }) if use_timestamp?
 
-        # Merge all attributes in
-        self.hash.merge!({ :attributes! => attributes })
-        self.hash
+        # Merge namespaces unless using global namespaces
+        hash.merge!({
+            :attributes! => {
+                'wsse:Security' => {
+                    'xmlns:wsse' => NAMESPACES[:wse],
+                    'xmlns:wsu' => NAMESPACES[:wsu]
+                }
+            }
+        }) unless use_global_namespaces?
+
+        # Merge signature if required
+        if use_signature?
+          hash[:attributes!] = {} unless hash[:attributes!].present?
+          hash[:attributes!]['wsse:Security'] = {} unless hash[:attributes!]['wsse:Security'].present?
+          hash[:attributes!]['wsse:Security'].merge!({ "#{env_namespace}:mustUnderstand" => '1' })
+        end
+
+        # Merge in UsernameToken
+        hash['wsse:Security'].merge!({ 'wsse:UsernameToken' => build_username_token })
+
+        # Merge in Timestamp if required
+        hash['wsse:Security'].merge!({ 'wsse:Timestamp' => build_timestamp }) if use_timestamp?
+        hash
       end
 
       def build_username_token
         # Build base hash
         token_hash = {
           'wsse:Username' => username,
-          'wsse:Password' => (use_digest? ? digest_password : password)
+          'wsse:Password' => (use_digest? ? digest_password : password),
+          :attributes! => {
+              'wsse:Password' => {
+                  'Type' => (use_digest? ? NAMESPACES[:digest_password] : NAMESPACES[:text_password])
+              }
+          }
         }
 
         # Merge in nonce if using it
         token_hash.merge!({ 'wsse:Nonce' => nonce }) if use_nonce?
         # Merge in Created if using it
         token_hash.merge!({ 'wsu:Created' => current_timestamp }) if use_created?
-
-        self.attributes.merge!({ 'wsse:Password' => { 'Type' => (use_digest? ? NAMESPACES[:digest_password] : NAMESPACES[:text_password])}})
-
         token_hash
       end
 
@@ -113,6 +148,7 @@ module Akami
             'wsu:Created' => current_timestamp,
             'wsu:Expires' => current_timestamp(60)
         }
+        # self.attributes.merge!({ 'wsse:Timestamp' => { 'wsu:Id' => "Timestamp-#{SecureRandom.uuid}" }})
         timestamp_hash
       end
 
